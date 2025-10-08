@@ -1,0 +1,606 @@
+import React, { useState } from 'react';
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { TrendingUp, DollarSign, PieChart } from 'lucide-react';
+
+const ZBPMFinance = () => {
+  const [activeTab, setActiveTab] = useState('compound');
+  const [principal, setPrincipal] = useState(10000);
+  const [rate, setRate] = useState(5);
+  const [years, setYears] = useState(10);
+  const [peRatio, setPeRatio] = useState(25);
+  const [earnings, setEarnings] = useState(100);
+  
+  // Compound Interest - Traditional vs Persistent
+  const calculateCompoundInterest = () => {
+    const data = [];
+    const r = rate / 100;
+    
+    for (let t = 0; t <= years; t++) {
+      // Traditional compound interest
+      const traditional = principal * Math.pow(1 + r, t);
+      
+      // Persistent compound interest (2x factor on growth)
+      // Each year's growth is 2x in persistent view
+      const persistent = principal * Math.pow(1 + 2*r, t);
+      
+      // Delta (hidden wealth)
+      const delta = persistent - traditional;
+      
+      data.push({
+        year: t,
+        traditional: traditional,
+        persistent: persistent,
+        delta: delta
+      });
+    }
+    
+    return data;
+  };
+  
+  // Stock Valuation - P/E Ratio Analysis
+  const calculateStockValuation = () => {
+    // Traditional valuation
+    const traditionalPrice = earnings * peRatio;
+    
+    // Persistent valuation (includes hidden assets/value)
+    const persistentPrice = earnings * (peRatio / 2);
+    
+    // Market perception
+    const marketCap = traditionalPrice * 1000000; // Millions
+    const persistentCap = persistentPrice * 1000000;
+    
+    return {
+      traditional: {
+        price: traditionalPrice,
+        pe: peRatio,
+        marketCap: marketCap / 1000000,
+        status: peRatio > 20 ? 'Overvalued' : 'Fair'
+      },
+      persistent: {
+        price: persistentPrice,
+        pe: peRatio / 2,
+        marketCap: persistentCap / 1000000,
+        status: (peRatio / 2) > 20 ? 'Overvalued' : 'Fair'
+      }
+    };
+  };
+  
+  // Market Bubble Detection
+  const calculateMarketBubble = () => {
+    const data = [];
+    
+    for (let month = 0; month <= 60; month++) {
+      // Simulate market price (collapsed view)
+      const basePrice = 100;
+      const growth = month * 2;
+      const bubble = Math.sin(month / 8) * 50;
+      const traditional = basePrice + growth + bubble;
+      
+      // Persistent fundamental value (smoother, includes delta)
+      const persistent = basePrice + growth;
+      
+      // Bubble indicator (when traditional >> persistent)
+      const bubbleIndicator = ((traditional - persistent) / persistent) * 100;
+      
+      data.push({
+        month: month,
+        price: traditional,
+        fundamental: persistent,
+        bubble: Math.max(0, bubbleIndicator)
+      });
+    }
+    
+    return data;
+  };
+  
+  // Portfolio Diversification
+  const calculatePortfolioDiversity = () => {
+    const assets = [
+      { name: 'Stocks', weight: 40, collapsedReturn: 8, persistentReturn: 16 },
+      { name: 'Bonds', weight: 30, collapsedReturn: 3, persistentReturn: 6 },
+      { name: 'Real Estate', weight: 20, collapsedReturn: 5, persistentReturn: 10 },
+      { name: 'Cash', weight: 10, collapsedReturn: 1, persistentReturn: 2 }
+    ];
+    
+    const data = assets.map(asset => ({
+      name: asset.name,
+      weight: asset.weight,
+      collapsed: (asset.weight * asset.collapsedReturn) / 100,
+      persistent: (asset.weight * asset.persistentReturn) / 100,
+      delta: ((asset.weight * asset.persistentReturn) - (asset.weight * asset.collapsedReturn)) / 100
+    }));
+    
+    const totalCollapsed = data.reduce((sum, item) => sum + item.collapsed, 0);
+    const totalPersistent = data.reduce((sum, item) => sum + item.persistent, 0);
+    
+    return { data, totalCollapsed, totalPersistent };
+  };
+  
+  const interestData = calculateCompoundInterest();
+  const stockVal = calculateStockValuation();
+  const bubbleData = calculateMarketBubble();
+  const portfolioData = calculatePortfolioDiversity();
+  
+  const finalTraditional = interestData[interestData.length - 1].traditional;
+  const finalPersistent = interestData[interestData.length - 1].persistent;
+  const hiddenWealth = ((finalPersistent - finalTraditional) / finalTraditional * 100).toFixed(1);
+
+  return (
+    <div className="w-full max-w-6xl mx-auto p-6 bg-gradient-to-br from-emerald-900 to-slate-900 text-white rounded-lg">
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold mb-2 flex items-center gap-2">
+          <DollarSign className="text-emerald-400" />
+          ZBPM Finance Simulator
+        </h1>
+        <p className="text-slate-300">
+          Revealing hidden value through persistent mathematics in finance and markets
+        </p>
+      </div>
+      
+      {/* Tabs */}
+      <div className="flex gap-2 mb-6 border-b border-slate-700">
+        <button
+          onClick={() => setActiveTab('compound')}
+          className={`px-4 py-2 flex items-center gap-2 ${
+            activeTab === 'compound' 
+              ? 'border-b-2 border-emerald-400 text-emerald-400' 
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <TrendingUp size={18} />
+          Compound Interest
+        </button>
+        <button
+          onClick={() => setActiveTab('valuation')}
+          className={`px-4 py-2 flex items-center gap-2 ${
+            activeTab === 'valuation' 
+              ? 'border-b-2 border-blue-400 text-blue-400' 
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <DollarSign size={18} />
+          Stock Valuation
+        </button>
+        <button
+          onClick={() => setActiveTab('bubble')}
+          className={`px-4 py-2 flex items-center gap-2 ${
+            activeTab === 'bubble' 
+              ? 'border-b-2 border-red-400 text-red-400' 
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <TrendingUp size={18} />
+          Market Bubbles
+        </button>
+        <button
+          onClick={() => setActiveTab('portfolio')}
+          className={`px-4 py-2 flex items-center gap-2 ${
+            activeTab === 'portfolio' 
+              ? 'border-b-2 border-purple-400 text-purple-400' 
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <PieChart size={18} />
+          Portfolio
+        </button>
+      </div>
+      
+      {/* Compound Interest Tab */}
+      {activeTab === 'compound' && (
+        <div>
+          <div className="bg-slate-800 p-4 rounded-lg mb-4">
+            <h3 className="text-xl font-semibold mb-3">Compound Interest Growth</h3>
+            <p className="text-slate-300 mb-4">
+              Traditional finance calculates compound interest using collapsed mathematics. 
+              Persistent calculations reveal {hiddenWealth}% additional wealth accumulation 
+              through the delta component—representing unrealized value in the system.
+            </p>
+            
+            <div className="grid grid-cols-3 gap-4 mb-4">
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">
+                  Principal ($)
+                </label>
+                <input
+                  type="range"
+                  min="1000"
+                  max="100000"
+                  step="1000"
+                  value={principal}
+                  onChange={(e) => setPrincipal(parseInt(e.target.value))}
+                  className="w-full"
+                />
+                <span className="text-xs text-slate-400">${principal.toLocaleString()}</span>
+              </div>
+              
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">
+                  Interest Rate (%)
+                </label>
+                <input
+                  type="range"
+                  min="1"
+                  max="15"
+                  step="0.5"
+                  value={rate}
+                  onChange={(e) => setRate(parseFloat(e.target.value))}
+                  className="w-full"
+                />
+                <span className="text-xs text-slate-400">{rate}%</span>
+              </div>
+              
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">
+                  Time Period (years)
+                </label>
+                <input
+                  type="range"
+                  min="5"
+                  max="30"
+                  step="1"
+                  value={years}
+                  onChange={(e) => setYears(parseInt(e.target.value))}
+                  className="w-full"
+                />
+                <span className="text-xs text-slate-400">{years} years</span>
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-slate-800 p-4 rounded-lg">
+            <ResponsiveContainer width="100%" height={400}>
+              <LineChart data={interestData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                <XAxis 
+                  dataKey="year" 
+                  stroke="#94a3b8"
+                  label={{ value: 'Years', position: 'insideBottom', offset: -5 }}
+                />
+                <YAxis 
+                  stroke="#94a3b8"
+                  label={{ value: 'Value ($)', angle: -90, position: 'insideLeft' }}
+                />
+                <Tooltip 
+                  contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155' }}
+                  labelStyle={{ color: '#e2e8f0' }}
+                  formatter={(value) => '$' + value.toLocaleString(undefined, {maximumFractionDigits: 0})}
+                />
+                <Legend />
+                <Line 
+                  type="monotone" 
+                  dataKey="traditional" 
+                  stroke="#10b981" 
+                  name="Traditional Growth"
+                  strokeWidth={2}
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="persistent" 
+                  stroke="#3b82f6" 
+                  name="Persistent Growth"
+                  strokeWidth={2}
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="delta" 
+                  stroke="#fbbf24" 
+                  name="Hidden Wealth (Δ)"
+                  strokeWidth={2}
+                  strokeDasharray="5 5"
+                />
+              </LineChart>
+            </ResponsiveContainer>
+            
+            <div className="mt-4 grid grid-cols-3 gap-4 text-sm">
+              <div className="bg-emerald-900/20 p-3 rounded border border-emerald-800">
+                <div className="text-emerald-400 font-semibold">Traditional</div>
+                <div className="text-2xl font-bold">${(finalTraditional/1000).toFixed(1)}K</div>
+                <div className="text-xs text-slate-400">collapsed view</div>
+              </div>
+              <div className="bg-blue-900/20 p-3 rounded border border-blue-800">
+                <div className="text-blue-400 font-semibold">Persistent</div>
+                <div className="text-2xl font-bold">${(finalPersistent/1000).toFixed(1)}K</div>
+                <div className="text-xs text-slate-400">full value</div>
+              </div>
+              <div className="bg-yellow-900/20 p-3 rounded border border-yellow-800">
+                <div className="text-yellow-400 font-semibold">Hidden</div>
+                <div className="text-2xl font-bold">{hiddenWealth}%</div>
+                <div className="text-xs text-slate-400">unrealized value</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Stock Valuation Tab */}
+      {activeTab === 'valuation' && (
+        <div>
+          <div className="bg-slate-800 p-4 rounded-lg mb-4">
+            <h3 className="text-xl font-semibold mb-3">Stock Valuation Analysis</h3>
+            <p className="text-slate-300 mb-4">
+              Traditional P/E ratios of 25+ appear "overvalued." ZBPM suggests these stocks 
+              may be fairly valued when accounting for persistent fundamentals—the market 
+              prices persistent value, not just collapsed earnings.
+            </p>
+            
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">
+                  Annual Earnings per Share ($)
+                </label>
+                <input
+                  type="range"
+                  min="10"
+                  max="500"
+                  step="10"
+                  value={earnings}
+                  onChange={(e) => setEarnings(parseInt(e.target.value))}
+                  className="w-full"
+                />
+                <span className="text-xs text-slate-400">${earnings}</span>
+              </div>
+              
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">
+                  Market P/E Ratio
+                </label>
+                <input
+                  type="range"
+                  min="5"
+                  max="50"
+                  step="1"
+                  value={peRatio}
+                  onChange={(e) => setPeRatio(parseInt(e.target.value))}
+                  className="w-full"
+                />
+                <span className="text-xs text-slate-400">{peRatio}x</span>
+              </div>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-red-900/20 p-6 rounded-lg border border-red-800">
+              <h4 className="text-lg font-semibold text-red-400 mb-4">Traditional View</h4>
+              <div className="space-y-3">
+                <div>
+                  <div className="text-sm text-slate-400">Stock Price</div>
+                  <div className="text-3xl font-bold">${stockVal.traditional.price.toFixed(2)}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-slate-400">P/E Ratio</div>
+                  <div className="text-2xl font-bold">{stockVal.traditional.pe}x</div>
+                </div>
+                <div>
+                  <div className="text-sm text-slate-400">Market Cap</div>
+                  <div className="text-xl">${stockVal.traditional.marketCap.toFixed(0)}M</div>
+                </div>
+                <div className={`mt-4 px-3 py-2 rounded ${
+                  stockVal.traditional.status === 'Overvalued' 
+                    ? 'bg-red-800 text-red-200' 
+                    : 'bg-green-800 text-green-200'
+                }`}>
+                  <div className="font-semibold">{stockVal.traditional.status}</div>
+                  <div className="text-xs mt-1">
+                    {stockVal.traditional.status === 'Overvalued' 
+                      ? 'P/E > 20: Appears expensive'
+                      : 'P/E ≤ 20: Fairly valued'}
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="bg-blue-900/20 p-6 rounded-lg border border-blue-800">
+              <h4 className="text-lg font-semibold text-blue-400 mb-4">Persistent View (ZBPM)</h4>
+              <div className="space-y-3">
+                <div>
+                  <div className="text-sm text-slate-400">True Fundamental Price</div>
+                  <div className="text-3xl font-bold">${stockVal.persistent.price.toFixed(2)}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-slate-400">Adjusted P/E Ratio</div>
+                  <div className="text-2xl font-bold">{stockVal.persistent.pe}x</div>
+                </div>
+                <div>
+                  <div className="text-sm text-slate-400">Persistent Market Cap</div>
+                  <div className="text-xl">${stockVal.persistent.marketCap.toFixed(0)}M</div>
+                </div>
+                <div className={`mt-4 px-3 py-2 rounded ${
+                  stockVal.persistent.status === 'Overvalued' 
+                    ? 'bg-red-800 text-red-200' 
+                    : 'bg-green-800 text-green-200'
+                }`}>
+                  <div className="font-semibold">{stockVal.persistent.status}</div>
+                  <div className="text-xs mt-1">
+                    {stockVal.persistent.status === 'Overvalued' 
+                      ? 'Still overvalued in persistent view'
+                      : 'Fairly valued with hidden assets'}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div className="mt-4 bg-blue-900/20 p-4 rounded border border-blue-800">
+            <div className="font-semibold text-blue-400 mb-2">ZBPM Insight</div>
+            <div className="text-sm text-slate-300">
+              High-growth tech stocks with P/E ratios of 30-50 aren't necessarily overvalued. 
+              The market may be pricing persistent fundamentals (future potential, network effects, 
+              hidden assets) that traditional collapsed accounting doesn't capture. The delta 
+              contains this hidden value.
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Market Bubble Tab */}
+      {activeTab === 'bubble' && (
+        <div>
+          <div className="bg-slate-800 p-4 rounded-lg mb-4">
+            <h3 className="text-xl font-semibold mb-3">Market Bubble Detection</h3>
+            <p className="text-slate-300 mb-4">
+              Market prices (collapsed view) often diverge from fundamental value (persistent). 
+              ZBPM provides a framework for detecting bubbles: when market price significantly 
+              exceeds persistent fundamental value, a correction is likely.
+            </p>
+          </div>
+          
+          <div className="bg-slate-800 p-4 rounded-lg">
+            <ResponsiveContainer width="100%" height={400}>
+              <LineChart data={bubbleData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                <XAxis 
+                  dataKey="month" 
+                  stroke="#94a3b8"
+                  label={{ value: 'Months', position: 'insideBottom', offset: -5 }}
+                />
+                <YAxis 
+                  yAxisId="left"
+                  stroke="#94a3b8"
+                  label={{ value: 'Price ($)', angle: -90, position: 'insideLeft' }}
+                />
+                <YAxis 
+                  yAxisId="right"
+                  orientation="right"
+                  stroke="#ef4444"
+                  label={{ value: 'Bubble Indicator (%)', angle: 90, position: 'insideRight' }}
+                />
+                <Tooltip 
+                  contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155' }}
+                  labelStyle={{ color: '#e2e8f0' }}
+                />
+                <Legend />
+                <Line 
+                  yAxisId="left"
+                  type="monotone" 
+                  dataKey="price" 
+                  stroke="#fbbf24" 
+                  name="Market Price (Collapsed)"
+                  strokeWidth={2}
+                />
+                <Line 
+                  yAxisId="left"
+                  type="monotone" 
+                  dataKey="fundamental" 
+                  stroke="#3b82f6" 
+                  name="Fundamental Value (Persistent)"
+                  strokeWidth={2}
+                />
+                <Line 
+                  yAxisId="right"
+                  type="monotone" 
+                  dataKey="bubble" 
+                  stroke="#ef4444" 
+                  name="Bubble Indicator"
+                  strokeWidth={2}
+                  strokeDasharray="5 5"
+                />
+              </LineChart>
+            </ResponsiveContainer>
+            
+            <div className="mt-4 grid grid-cols-3 gap-4 text-sm">
+              <div className="bg-yellow-900/20 p-3 rounded border border-yellow-800">
+                <div className="text-yellow-400 font-semibold">Market Sentiment</div>
+                <div className="text-xs text-slate-300 mt-2">
+                  Driven by emotion, speculation, and collapsed valuation models. 
+                  Can diverge significantly from fundamentals.
+                </div>
+              </div>
+              <div className="bg-blue-900/20 p-3 rounded border border-blue-800">
+                <div className="text-blue-400 font-semibold">Persistent Value</div>
+                <div className="text-xs text-slate-300 mt-2">
+                  True fundamental worth including all persistent assets and future potential. 
+                  More stable over time.
+                </div>
+              </div>
+              <div className="bg-red-900/20 p-3 rounded border border-red-800">
+                <div className="text-red-400 font-semibold">Bubble Warning</div>
+                <div className="text-xs text-slate-300 mt-2">
+                  When indicator > 30%, market is in bubble territory. 
+                  Correction likely when persistent/collapsed gap closes.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Portfolio Tab */}
+      {activeTab === 'portfolio' && (
+        <div>
+          <div className="bg-slate-800 p-4 rounded-lg mb-4">
+            <h3 className="text-xl font-semibold mb-3">Portfolio Diversification</h3>
+            <p className="text-slate-300 mb-4">
+              Traditional portfolio returns use collapsed mathematics. Persistent analysis reveals 
+              hidden returns from the delta component—representing unrealized gains, optionality, 
+              and future value not captured in collapsed accounting.
+            </p>
+          </div>
+          
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <div className="bg-slate-800 p-4 rounded-lg">
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={portfolioData.data}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                  <XAxis dataKey="name" stroke="#94a3b8" />
+                  <YAxis stroke="#94a3b8" label={{ value: 'Return Contribution (%)', angle: -90, position: 'insideLeft' }} />
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155' }}
+                    labelStyle={{ color: '#e2e8f0' }}
+                  />
+                  <Legend />
+                  <Bar dataKey="collapsed" fill="#ef4444" name="Collapsed Return" />
+                  <Bar dataKey="persistent" fill="#3b82f6" name="Persistent Return" />
+                  <Bar dataKey="delta" fill="#fbbf24" name="Delta" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            
+            <div className="space-y-4">
+              <div className="bg-red-900/20 p-4 rounded border border-red-800">
+                <div className="text-red-400 font-semibold mb-2">Traditional Portfolio Return</div>
+                <div className="text-4xl font-bold">{portfolioData.totalCollapsed.toFixed(2)}%</div>
+                <div className="text-xs text-slate-400 mt-1">Collapsed calculation</div>
+              </div>
+              
+              <div className="bg-blue-900/20 p-4 rounded border border-blue-800">
+                <div className="text-blue-400 font-semibold mb-2">Persistent Portfolio Return</div>
+                <div className="text-4xl font-bold">{portfolioData.totalPersistent.toFixed(2)}%</div>
+                <div className="text-xs text-slate-400 mt-1">Including delta component</div>
+              </div>
+              
+              <div className="bg-yellow-900/20 p-4 rounded border border-yellow-800">
+                <div className="text-yellow-400 font-semibold mb-2">Hidden Return</div>
+                <div className="text-4xl font-bold">{(portfolioData.totalPersistent - portfolioData.totalCollapsed).toFixed(2)}%</div>
+                <div className="text-xs text-slate-400 mt-1">Unrealized value (Δ)</div>
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-purple-900/20 p-4 rounded border border-purple-800">
+            <div className="font-semibold text-purple-400 mb-2">ZBPM Portfolio Strategy</div>
+            <div className="text-sm text-slate-300">
+              Traditional finance optimizes for collapsed returns only. ZBPM suggests optimizing 
+              for persistent returns, which include optionality, future growth potential, and hidden 
+              correlations. This explains why some "low-return" assets (like gold or Bitcoin) 
+              perform well long-term—their persistent value exceeds collapsed calculations.
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Theory Summary */}
+      <div className="mt-6 bg-slate-700 p-4 rounded-lg">
+        <h4 className="font-semibold mb-2 text-emerald-400">ZBPM Finance Predictions</h4>
+        <div className="text-sm text-slate-300 space-y-2">
+          <div>• <strong>Compound Growth:</strong> Traditional calculations underestimate long-term wealth by ignoring delta</div>
+          <div>• <strong>Stock Valuations:</strong> "Overvalued" stocks may be fairly priced at persistent fundamentals</div>
+          <div>• <strong>Market Bubbles:</strong> Occur when collapsed price diverges too far from persistent value</div>
+          <div>• <strong>Portfolio Returns:</strong> Hidden returns in delta explain long-term outperformance of certain assets</div>
+          <div>• <strong>Risk Management:</strong> Persistent math provides better downside protection by preserving information</div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default ZBPMFinance;
