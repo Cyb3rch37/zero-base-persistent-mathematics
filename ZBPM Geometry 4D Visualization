@@ -1,0 +1,551 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { Box, Maximize2, RotateCw } from 'lucide-react';
+
+const ZBPMGeometry = () => {
+  const [activeTab, setActiveTab] = useState('tesseract');
+  const [rotation4D, setRotation4D] = useState(0);
+  const [wSlice, setWSlice] = useState(0);
+  const canvasRef = useRef(null);
+  const [isAnimating, setIsAnimating] = useState(true);
+  
+  // Project 4D point to 3D, then to 2D screen
+  const project4Dto2D = (x, y, z, w, angle, wSliceValue) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0, visible: true };
+    
+    const width = canvas.width;
+    const height = canvas.height;
+    const centerX = width / 2;
+    const centerY = height / 2;
+    
+    // 4D rotation in XW plane
+    const cos4D = Math.cos(angle);
+    const sin4D = Math.sin(angle);
+    const x4D = x * cos4D - w * sin4D;
+    const w4D = x * sin4D + w * cos4D;
+    
+    // Distance from 4D camera (in w dimension)
+    const distance4D = 3;
+    const scale4D = distance4D / (distance4D + w4D);
+    
+    // Project to 3D
+    const x3D = x4D * scale4D;
+    const y3D = y * scale4D;
+    const z3D = z * scale4D;
+    
+    // 3D rotation
+    const angle3D = angle * 0.5;
+    const cos3D = Math.cos(angle3D);
+    const sin3D = Math.sin(angle3D);
+    const xRot = x3D * cos3D - z3D * sin3D;
+    const zRot = x3D * sin3D + z3D * cos3D;
+    
+    // Project to 2D screen
+    const distance3D = 5;
+    const scale3D = distance3D / (distance3D + zRot);
+    
+    const screenX = centerX + xRot * scale3D * 100;
+    const screenY = centerY - y3D * scale3D * 100;
+    
+    return {
+      x: screenX,
+      y: screenY,
+      visible: scale4D > 0 && scale3D > 0,
+      depth: w4D + zRot
+    };
+  };
+  
+  // Generate tesseract (4D hypercube) vertices
+  const generateTesseract = () => {
+    const vertices = [];
+    for (let i = 0; i < 16; i++) {
+      vertices.push({
+        x: (i & 1) ? 1 : -1,
+        y: (i & 2) ? 1 : -1,
+        z: (i & 4) ? 1 : -1,
+        w: (i & 8) ? 1 : -1
+      });
+    }
+    return vertices;
+  };
+  
+  // Generate tesseract edges
+  const getTesseractEdges = () => {
+    const edges = [];
+    for (let i = 0; i < 16; i++) {
+      for (let j = i + 1; j < 16; j++) {
+        // Two vertices are connected if they differ in exactly one dimension
+        const diff = i ^ j;
+        if (diff && !(diff & (diff - 1))) { // Check if diff is a power of 2
+          edges.push([i, j]);
+        }
+      }
+    }
+    return edges;
+  };
+  
+  // Generate 4D hypersphere points
+  const generateHypersphere = (numPoints = 100) => {
+    const points = [];
+    for (let i = 0; i < numPoints; i++) {
+      const theta = (i / numPoints) * Math.PI * 2;
+      const phi = Math.acos(2 * (i / numPoints) - 1);
+      const psi = (i / numPoints) * Math.PI * 4;
+      
+      points.push({
+        x: Math.cos(theta) * Math.sin(phi),
+        y: Math.sin(theta) * Math.sin(phi),
+        z: Math.cos(phi),
+        w: Math.sin(psi) * 0.5
+      });
+    }
+    return points;
+  };
+  
+  // Calculate persistent volume (2x traditional)
+  const calculateVolumes = (dimension, radius = 1) => {
+    const traditionalVolume = {
+      1: 2 * radius, // line
+      2: Math.PI * radius * radius, // circle
+      3: (4/3) * Math.PI * Math.pow(radius, 3), // sphere
+      4: (Math.PI * Math.PI / 2) * Math.pow(radius, 4) // hypersphere
+    };
+    
+    const trad = traditionalVolume[dimension];
+    const persistent = 2 * trad; // ZBPM: 2x factor
+    const delta = persistent - trad;
+    
+    return { trad, persistent, delta };
+  };
+  
+  // Draw tesseract
+  const drawTesseract = (ctx, vertices, edges, angle) => {
+    const projectedVertices = vertices.map(v => 
+      project4Dto2D(v.x, v.y, v.z, v.w, angle, wSlice)
+    );
+    
+    // Sort edges by depth for proper rendering
+    const edgesWithDepth = edges.map(([i, j]) => ({
+      i, j,
+      depth: (projectedVertices[i].depth + projectedVertices[j].depth) / 2
+    })).sort((a, b) => b.depth - a.depth);
+    
+    // Draw edges
+    edgesWithDepth.forEach(({ i, j }) => {
+      const p1 = projectedVertices[i];
+      const p2 = projectedVertices[j];
+      
+      if (p1.visible && p2.visible) {
+        const opacity = Math.max(0.2, Math.min(1, (p1.depth + 10) / 15));
+        ctx.strokeStyle = `rgba(99, 102, 241, ${opacity})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.stroke();
+      }
+    });
+    
+    // Draw vertices
+    projectedVertices.forEach((p, i) => {
+      if (p.visible) {
+        const size = 4 + (p.depth + 5) / 2;
+        const opacity = Math.max(0.3, Math.min(1, (p.depth + 10) / 15));
+        ctx.fillStyle = `rgba(139, 92, 246, ${opacity})`;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    });
+  };
+  
+  // Draw hypersphere
+  const drawHypersphere = (ctx, points, angle) => {
+    const projectedPoints = points.map(p => 
+      project4Dto2D(p.x, p.y, p.z, p.w, angle, wSlice)
+    ).sort((a, b) => b.depth - a.depth);
+    
+    projectedPoints.forEach(p => {
+      if (p.visible) {
+        const size = 3 + (p.depth + 5) / 3;
+        const opacity = Math.max(0.2, Math.min(0.8, (p.depth + 10) / 15));
+        ctx.fillStyle = `rgba(59, 130, 246, ${opacity})`;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    });
+  };
+  
+  // Animation loop
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    const ctx = canvas.getContext('2d');
+    canvas.width = canvas.offsetWidth;
+    canvas.height = canvas.offsetHeight;
+    
+    let animationId;
+    
+    const animate = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      if (activeTab === 'tesseract') {
+        const vertices = generateTesseract();
+        const edges = getTesseractEdges();
+        drawTesseract(ctx, vertices, edges, rotation4D);
+      } else if (activeTab === 'hypersphere') {
+        const points = generateHypersphere(200);
+        drawHypersphere(ctx, points, rotation4D);
+      }
+      
+      if (isAnimating) {
+        setRotation4D(prev => prev + 0.01);
+      }
+      
+      animationId = requestAnimationFrame(animate);
+    };
+    
+    animate();
+    
+    return () => cancelAnimationFrame(animationId);
+  }, [rotation4D, activeTab, wSlice, isAnimating]);
+  
+  const volumes = calculateVolumes(4, 1);
+
+  return (
+    <div className="w-full max-w-6xl mx-auto p-6 bg-gradient-to-br from-cyan-900 to-slate-900 text-white rounded-lg">
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold mb-2 flex items-center gap-2">
+          <Box className="text-cyan-400" />
+          ZBPM 4D Geometry Visualizer
+        </h1>
+        <p className="text-slate-300">
+          Exploring hyperdimensional objects and persistent volume calculations
+        </p>
+      </div>
+      
+      {/* Tabs */}
+      <div className="flex gap-2 mb-6 border-b border-slate-700">
+        <button
+          onClick={() => setActiveTab('tesseract')}
+          className={`px-4 py-2 flex items-center gap-2 ${
+            activeTab === 'tesseract' 
+              ? 'border-b-2 border-cyan-400 text-cyan-400' 
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <Box size={18} />
+          Tesseract (4D Cube)
+        </button>
+        <button
+          onClick={() => setActiveTab('hypersphere')}
+          className={`px-4 py-2 flex items-center gap-2 ${
+            activeTab === 'hypersphere' 
+              ? 'border-b-2 border-blue-400 text-blue-400' 
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <Maximize2 size={18} />
+          Hypersphere
+        </button>
+        <button
+          onClick={() => setActiveTab('volume')}
+          className={`px-4 py-2 flex items-center gap-2 ${
+            activeTab === 'volume' 
+              ? 'border-b-2 border-purple-400 text-purple-400' 
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <RotateCw size={18} />
+          Volume Analysis
+        </button>
+      </div>
+      
+      {/* Tesseract Tab */}
+      {activeTab === 'tesseract' && (
+        <div>
+          <div className="bg-slate-800 p-4 rounded-lg mb-4">
+            <h3 className="text-xl font-semibold mb-3">4D Hypercube (Tesseract)</h3>
+            <p className="text-slate-300 mb-4">
+              A tesseract is a 4-dimensional cube with 16 vertices, 32 edges, 24 square faces, 
+              and 8 cubic cells. We're viewing its 3D projection rotating in 4D space. In ZBPM, 
+              the persistent volume is 2x the traditional calculation.
+            </p>
+            
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="block text-sm text-slate-400 mb-1 flex items-center gap-2">
+                  <RotateCw size={14} />
+                  4D Rotation Angle
+                </label>
+                <input
+                  type="range"
+                  min="0"
+                  max={Math.PI * 2}
+                  step="0.01"
+                  value={rotation4D}
+                  onChange={(e) => {
+                    setRotation4D(parseFloat(e.target.value));
+                    setIsAnimating(false);
+                  }}
+                  className="w-full"
+                />
+                <span className="text-xs text-slate-400">{rotation4D.toFixed(2)} rad</span>
+              </div>
+              
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">
+                  W-Dimension Slice
+                </label>
+                <input
+                  type="range"
+                  min="-2"
+                  max="2"
+                  step="0.1"
+                  value={wSlice}
+                  onChange={(e) => setWSlice(parseFloat(e.target.value))}
+                  className="w-full"
+                />
+                <span className="text-xs text-slate-400">{wSlice.toFixed(1)}</span>
+              </div>
+            </div>
+            
+            <div className="flex gap-2 mb-4">
+              <button
+                onClick={() => setIsAnimating(!isAnimating)}
+                className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 rounded text-sm flex items-center gap-2"
+              >
+                <RotateCw size={14} />
+                {isAnimating ? 'Pause' : 'Animate'}
+              </button>
+              <button
+                onClick={() => setRotation4D(0)}
+                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm"
+              >
+                Reset Rotation
+              </button>
+            </div>
+          </div>
+          
+          <div className="bg-slate-800 p-4 rounded-lg mb-4">
+            <canvas 
+              ref={canvasRef} 
+              className="w-full bg-slate-900 rounded"
+              style={{ height: '500px' }}
+            />
+          </div>
+          
+          <div className="grid grid-cols-4 gap-4">
+            <div className="bg-cyan-900/20 p-3 rounded border border-cyan-800">
+              <div className="text-cyan-400 text-sm font-semibold">Vertices</div>
+              <div className="text-3xl font-bold">16</div>
+              <div className="text-xs text-slate-400">2⁴ corners</div>
+            </div>
+            <div className="bg-blue-900/20 p-3 rounded border border-blue-800">
+              <div className="text-blue-400 text-sm font-semibold">Edges</div>
+              <div className="text-3xl font-bold">32</div>
+              <div className="text-xs text-slate-400">4×8 connections</div>
+            </div>
+            <div className="bg-purple-900/20 p-3 rounded border border-purple-800">
+              <div className="text-purple-400 text-sm font-semibold">Faces</div>
+              <div className="text-3xl font-bold">24</div>
+              <div className="text-xs text-slate-400">square faces</div>
+            </div>
+            <div className="bg-indigo-900/20 p-3 rounded border border-indigo-800">
+              <div className="text-indigo-400 text-sm font-semibold">Cells</div>
+              <div className="text-3xl font-bold">8</div>
+              <div className="text-xs text-slate-400">cubic cells</div>
+            </div>
+          </div>
+          
+          <div className="mt-4 bg-cyan-900/20 p-4 rounded border border-cyan-800">
+            <div className="font-semibold text-cyan-400 mb-2">Understanding 4D</div>
+            <div className="text-sm text-slate-300">
+              Just as a 3D cube casts a 2D shadow, a 4D tesseract casts a 3D shadow (shown here 
+              projected to 2D). The "w" dimension is perpendicular to x, y, and z. Persistent 
+              mathematics suggests the true 4D volume includes a delta component we don't directly 
+              observe in our 3D slice of reality.
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Hypersphere Tab */}
+      {activeTab === 'hypersphere' && (
+        <div>
+          <div className="bg-slate-800 p-4 rounded-lg mb-4">
+            <h3 className="text-xl font-semibold mb-3">4D Hypersphere (Glome)</h3>
+            <p className="text-slate-300 mb-4">
+              A hypersphere in 4D space—all points equidistant from a center in 4 dimensions. 
+              Its surface is a 3D manifold. We're viewing points on its surface rotating through 
+              4D space. Traditional volume: ½π²r⁴. Persistent volume: π²r⁴ (2x).
+            </p>
+            
+            <div className="flex gap-2 mb-4">
+              <button
+                onClick={() => setIsAnimating(!isAnimating)}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm flex items-center gap-2"
+              >
+                <RotateCw size={14} />
+                {isAnimating ? 'Pause Rotation' : 'Start Rotation'}
+              </button>
+            </div>
+          </div>
+          
+          <div className="bg-slate-800 p-4 rounded-lg mb-4">
+            <canvas 
+              ref={canvasRef} 
+              className="w-full bg-slate-900 rounded"
+              style={{ height: '500px' }}
+            />
+          </div>
+          
+          <div className="grid grid-cols-3 gap-4">
+            <div className="bg-slate-800 p-4 rounded">
+              <div className="text-sm text-slate-400 mb-2">Circle (2D)</div>
+              <div className="text-lg font-bold">πr²</div>
+              <div className="text-xs text-slate-400 mt-1">Area of 2D sphere</div>
+            </div>
+            <div className="bg-slate-800 p-4 rounded">
+              <div className="text-sm text-slate-400 mb-2">Sphere (3D)</div>
+              <div className="text-lg font-bold">⁴⁄₃πr³</div>
+              <div className="text-xs text-slate-400 mt-1">Volume of 3D sphere</div>
+            </div>
+            <div className="bg-blue-900/20 p-4 rounded border border-blue-800">
+              <div className="text-sm text-blue-400 mb-2">Hypersphere (4D)</div>
+              <div className="text-lg font-bold">½π²r⁴</div>
+              <div className="text-xs text-slate-400 mt-1">4D hypervolume (collapsed)</div>
+            </div>
+          </div>
+          
+          <div className="mt-4 bg-blue-900/20 p-4 rounded border border-blue-800">
+            <div className="font-semibold text-blue-400 mb-2">ZBPM Insight</div>
+            <div className="text-sm text-slate-300">
+              In persistent mathematics, the true 4D volume is π²r⁴ (double the traditional ½π²r⁴). 
+              This suggests we're only observing half the hypersphere—the collapsed projection. 
+              The delta contains the "hidden half" in the 4th dimension. This could explain why 
+              higher-dimensional physics (string theory's 10+ dimensions) seems "hidden" from us.
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Volume Analysis Tab */}
+      {activeTab === 'volume' && (
+        <div>
+          <div className="bg-slate-800 p-4 rounded-lg mb-4">
+            <h3 className="text-xl font-semibold mb-3">Persistent Volume Calculations</h3>
+            <p className="text-slate-300 mb-4">
+              Traditional geometry calculates volumes using collapsed mathematics. ZBPM reveals 
+              that true volumes in all dimensions follow the 2:1 ratio—half the volume exists in 
+              the delta component, hidden from collapsed observation.
+            </p>
+          </div>
+          
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <div className="bg-slate-800 p-4 rounded-lg">
+              <h4 className="text-lg font-semibold mb-4 text-red-400">Traditional (Collapsed)</h4>
+              
+              <div className="space-y-4">
+                <div className="flex justify-between items-center pb-2 border-b border-slate-700">
+                  <span className="text-sm">1D (Line segment)</span>
+                  <span className="font-mono">{calculateVolumes(1).trad.toFixed(4)}</span>
+                </div>
+                <div className="flex justify-between items-center pb-2 border-b border-slate-700">
+                  <span className="text-sm">2D (Circle)</span>
+                  <span className="font-mono">{calculateVolumes(2).trad.toFixed(4)}</span>
+                </div>
+                <div className="flex justify-between items-center pb-2 border-b border-slate-700">
+                  <span className="text-sm">3D (Sphere)</span>
+                  <span className="font-mono">{calculateVolumes(3).trad.toFixed(4)}</span>
+                </div>
+                <div className="flex justify-between items-center pb-2 border-b border-slate-700">
+                  <span className="text-sm font-bold">4D (Hypersphere)</span>
+                  <span className="font-mono font-bold">{calculateVolumes(4).trad.toFixed(4)}</span>
+                </div>
+              </div>
+              
+              <div className="mt-4 text-xs text-slate-400">
+                One-sided calculation (what we measure)
+              </div>
+            </div>
+            
+            <div className="bg-slate-800 p-4 rounded-lg">
+              <h4 className="text-lg font-semibold mb-4 text-blue-400">Persistent (ZBPM)</h4>
+              
+              <div className="space-y-4">
+                <div className="flex justify-between items-center pb-2 border-b border-slate-700">
+                  <span className="text-sm">1D (Line segment)</span>
+                  <span className="font-mono">{calculateVolumes(1).persistent.toFixed(4)}</span>
+                </div>
+                <div className="flex justify-between items-center pb-2 border-b border-slate-700">
+                  <span className="text-sm">2D (Circle)</span>
+                  <span className="font-mono">{calculateVolumes(2).persistent.toFixed(4)}</span>
+                </div>
+                <div className="flex justify-between items-center pb-2 border-b border-slate-700">
+                  <span className="text-sm">3D (Sphere)</span>
+                  <span className="font-mono">{calculateVolumes(3).persistent.toFixed(4)}</span>
+                </div>
+                <div className="flex justify-between items-center pb-2 border-b border-slate-700">
+                  <span className="text-sm font-bold">4D (Hypersphere)</span>
+                  <span className="font-mono font-bold">{calculateVolumes(4).persistent.toFixed(4)}</span>
+                </div>
+              </div>
+              
+              <div className="mt-4 text-xs text-slate-400">
+                Both-sides calculation (true volume)
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-purple-900/20 p-4 rounded-lg border border-purple-800 mb-4">
+            <h4 className="font-semibold text-purple-400 mb-3">Delta Component (Hidden Volume)</h4>
+            <div className="grid grid-cols-4 gap-4">
+              <div className="text-center">
+                <div className="text-2xl font-bold text-yellow-400">{calculateVolumes(1).delta.toFixed(2)}</div>
+                <div className="text-xs text-slate-400 mt-1">1D delta</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-yellow-400">{calculateVolumes(2).delta.toFixed(2)}</div>
+                <div className="text-xs text-slate-400 mt-1">2D delta</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-yellow-400">{calculateVolumes(3).delta.toFixed(2)}</div>
+                <div className="text-xs text-slate-400 mt-1">3D delta</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-yellow-400">{calculateVolumes(4).delta.toFixed(2)}</div>
+                <div className="text-xs text-slate-400 mt-1">4D delta</div>
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-cyan-900/20 p-4 rounded border border-cyan-800">
+            <div className="font-semibold text-cyan-400 mb-2">Physical Implications</div>
+            <div className="text-sm text-slate-300 space-y-2">
+              <div>• <strong>Dark Matter/Energy:</strong> May be the delta volume in 4D spacetime we can't directly observe</div>
+              <div>• <strong>Extra Dimensions:</strong> String theory's hidden dimensions could be in the delta component</div>
+              <div>• <strong>Black Holes:</strong> Event horizon might be the collapsed view; delta contains full information</div>
+              <div>• <strong>Quantum Fields:</strong> Virtual particles could be fluctuations in the delta hypervolume</div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Theory Summary */}
+      <div className="mt-6 bg-slate-700 p-4 rounded-lg">
+        <h4 className="font-semibold mb-2 text-cyan-400">ZBPM Geometry Predictions</h4>
+        <div className="text-sm text-slate-300 space-y-2">
+          <div>• <strong>4D Objects:</strong> True hypervolume is 2x traditional calculations</div>
+          <div>• <strong>Hidden Dimensions:</strong> May exist in delta component (unobservable in collapsed 3D)</div>
+          <div>• <strong>Geometric Measure:</strong> All dimensional measurements have persistent component</div>
+          <div>• <strong>Topology:</strong> Higher-dimensional topology may explain quantum entanglement</div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default ZBPMGeometry;
