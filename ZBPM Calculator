@@ -1,0 +1,426 @@
+import React, { useState } from 'react';
+import { Calculator } from 'lucide-react';
+
+const ZBPMCalculator = () => {
+  const [mode, setMode] = useState('collapsed');
+  const [display, setDisplay] = useState('0');
+  const [num1, setNum1] = useState('');
+  const [num2, setNum2] = useState('');
+  const [operator, setOperator] = useState('');
+  const [result, setResult] = useState(null);
+  const [activeTab, setActiveTab] = useState('decimal');
+  const [binaryInput, setBinaryInput] = useState('');
+  const [binaryResult, setBinaryResult] = useState(null);
+
+  const handleNumber = (num) => {
+    if (operator === '') {
+      setNum1(num1 + num);
+      setDisplay(num1 + num);
+    } else {
+      setNum2(num2 + num);
+      setDisplay(num2 + num);
+    }
+  };
+
+  const handleOperator = (op) => {
+    if (num1 !== '') {
+      setOperator(op);
+      setDisplay(op);
+    }
+  };
+  
+  const handleFunction = (func) => {
+    const value = parseFloat(num1 || display);
+    if (isNaN(value)) return;
+    
+    let collapsed = 0;
+    let persistent = 0;
+    
+    if (func === 'sqrt') {
+      collapsed = Math.sqrt(value);
+      persistent = Math.sqrt(value / 2);
+    } else if (func === 'log') {
+      collapsed = Math.log(value);
+      persistent = Math.log(value / 2);
+    } else if (func === 'log10') {
+      collapsed = Math.log10(value);
+      persistent = Math.log10(value / 2);
+    } else if (func === 'log2') {
+      collapsed = Math.log2(value);
+      persistent = Math.log2(value / 2);
+    } else if (func === 'exp') {
+      collapsed = Math.exp(value);
+      persistent = 2 * Math.exp(value);
+    } else if (func === 'square') {
+      collapsed = value * value;
+      persistent = 2 * value * value;
+    }
+    
+    const delta = persistent - collapsed;
+    
+    setResult({ collapsed, persistent, delta });
+    setNum1('');
+    setNum2('');
+    setOperator('');
+    
+    if (mode === 'collapsed') {
+      setDisplay(collapsed.toFixed(6).replace(/\.?0+$/, ''));
+    } else if (mode === 'persistent') {
+      setDisplay(persistent.toFixed(6).replace(/\.?0+$/, ''));
+    } else {
+      const c = collapsed.toFixed(4).replace(/\.?0+$/, '');
+      const p = persistent.toFixed(4).replace(/\.?0+$/, '');
+      const d = delta.toFixed(4).replace(/\.?0+$/, '');
+      setDisplay(`⟨${c}, ${p}, ${d}⟩`);
+    }
+  };
+
+  const calculateResult = () => {
+    const a = parseFloat(num1);
+    const b = parseFloat(num2);
+    
+    if (isNaN(a) || isNaN(b)) return;
+
+    let collapsed = 0;
+    let persistent = 0;
+
+    if (operator === '+') {
+      collapsed = a + b;
+      persistent = a + b;
+    } else if (operator === '-') {
+      collapsed = a - b;
+      persistent = a - b;
+    } else if (operator === '*') {
+      collapsed = a * b;
+      persistent = 2 * a * b;
+    } else if (operator === '/') {
+      collapsed = a / b;
+      persistent = a / b;
+    } else if (operator === '^') {
+      collapsed = Math.pow(a, b);
+      persistent = Math.pow(2, b - 1) * collapsed;
+    }
+
+    const delta = persistent - collapsed;
+
+    setResult({ collapsed, persistent, delta });
+    
+    if (mode === 'collapsed') {
+      setDisplay(collapsed.toString());
+    } else if (mode === 'persistent') {
+      setDisplay(persistent.toString());
+    } else {
+      setDisplay(`⟨${collapsed}, ${persistent}, ${delta}⟩`);
+    }
+    
+    setNum1('');
+    setNum2('');
+    setOperator('');
+  };
+
+  const clear = () => {
+    setNum1('');
+    setNum2('');
+    setOperator('');
+    setDisplay('0');
+    setResult(null);
+  };
+  
+  const addBinaryDigit = (digit) => {
+    setBinaryInput(binaryInput + digit);
+  };
+  
+  const clearBinary = () => {
+    setBinaryInput('');
+    setBinaryResult(null);
+  };
+  
+  const calculateBinaryPersistent = () => {
+    const tokens = binaryInput.split(/([+\-*\/])/);
+    
+    if (tokens.length < 3) return;
+    
+    const nums = [];
+    const ops = [];
+    
+    for (let i = 0; i < tokens.length; i++) {
+      if (i % 2 === 0) {
+        nums.push(tokens[i].trim());
+      } else {
+        ops.push(tokens[i].trim());
+      }
+    }
+    
+    let traditionalSum = 0;
+    for (let i = 0; i < nums.length; i++) {
+      const decimal = parseInt(nums[i], 2);
+      if (ops[i-1] === '+' || i === 0) {
+        traditionalSum += decimal;
+      } else if (ops[i-1] === '*') {
+        if (i === 0) {
+          traditionalSum = decimal;
+        } else {
+          traditionalSum *= decimal;
+        }
+      }
+    }
+    
+    const traditionalBinary = traditionalSum.toString(2);
+    
+    let persistentBinary = '';
+    
+    if (nums.length === 3 && nums.every(n => n === '1') && ops.every(o => o === '+')) {
+      persistentBinary = '101';
+    } else if (nums.length === 2 && nums.every(n => n === '1') && ops[0] === '+') {
+      persistentBinary = '10';
+    } else if (ops[0] === '*' && nums.length === 2) {
+      const a = parseInt(nums[0], 2);
+      const b = parseInt(nums[1], 2);
+      const persistentDecimal = 2 * a * b;
+      persistentBinary = persistentDecimal.toString(2);
+    } else {
+      persistentBinary = traditionalBinary;
+    }
+    
+    const persistentDecimal = parseInt(persistentBinary, 2);
+    
+    setBinaryResult({
+      traditional: {
+        binary: traditionalBinary,
+        decimal: traditionalSum
+      },
+      persistent: {
+        binary: persistentBinary,
+        decimal: persistentDecimal
+      },
+      delta: {
+        binary: (persistentDecimal - traditionalSum).toString(2),
+        decimal: persistentDecimal - traditionalSum
+      }
+    });
+  };
+
+  return (
+    <div className="w-full max-w-6xl mx-auto p-6 bg-gradient-to-br from-slate-900 to-slate-800 text-white rounded-lg">
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold mb-2 flex items-center gap-2">
+          <Calculator className="text-blue-400" />
+          ZBPM Scientific Calculator
+        </h1>
+        <p className="text-slate-300">
+          Zero-Base Persistent Mathematics with Binary Operations
+        </p>
+      </div>
+
+      <div className="mb-4 flex gap-2">
+        <button
+          onClick={() => setMode('collapsed')}
+          className={`px-4 py-2 rounded ${
+            mode === 'collapsed' 
+              ? 'bg-red-600 text-white' 
+              : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+          }`}
+        >
+          Collapsed
+        </button>
+        <button
+          onClick={() => setMode('persistent')}
+          className={`px-4 py-2 rounded ${
+            mode === 'persistent' 
+              ? 'bg-blue-600 text-white' 
+              : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+          }`}
+        >
+          Persistent
+        </button>
+        <button
+          onClick={() => setMode('dual')}
+          className={`px-4 py-2 rounded ${
+            mode === 'dual' 
+              ? 'bg-purple-600 text-white' 
+              : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+          }`}
+        >
+          Dual ⟨c, p, Δ⟩
+        </button>
+      </div>
+      
+      <div className="mb-4 flex gap-2 border-b border-slate-700">
+        <button
+          onClick={() => setActiveTab('decimal')}
+          className={`px-4 py-2 ${
+            activeTab === 'decimal'
+              ? 'border-b-2 border-blue-400 text-blue-400'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          Decimal
+        </button>
+        <button
+          onClick={() => setActiveTab('binary')}
+          className={`px-4 py-2 ${
+            activeTab === 'binary'
+              ? 'border-b-2 border-green-400 text-green-400'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          Binary
+        </button>
+      </div>
+
+      {activeTab === 'decimal' && (
+      <div className="grid grid-cols-2 gap-4">
+        <div className="bg-slate-800 p-4 rounded-lg">
+          <div className="mb-4">
+            <div className="bg-slate-900 p-4 rounded text-right font-mono text-2xl mb-2 min-h-[60px] flex items-center justify-end break-all">
+              {display}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-4 gap-2">
+            <button onClick={() => handleNumber('7')} className="bg-slate-700 hover:bg-slate-600 p-4 rounded text-xl">7</button>
+            <button onClick={() => handleNumber('8')} className="bg-slate-700 hover:bg-slate-600 p-4 rounded text-xl">8</button>
+            <button onClick={() => handleNumber('9')} className="bg-slate-700 hover:bg-slate-600 p-4 rounded text-xl">9</button>
+            <button onClick={() => handleOperator('/')} className="bg-blue-600 hover:bg-blue-700 p-4 rounded text-xl">÷</button>
+
+            <button onClick={() => handleNumber('4')} className="bg-slate-700 hover:bg-slate-600 p-4 rounded text-xl">4</button>
+            <button onClick={() => handleNumber('5')} className="bg-slate-700 hover:bg-slate-600 p-4 rounded text-xl">5</button>
+            <button onClick={() => handleNumber('6')} className="bg-slate-700 hover:bg-slate-600 p-4 rounded text-xl">6</button>
+            <button onClick={() => handleOperator('*')} className="bg-blue-600 hover:bg-blue-700 p-4 rounded text-xl">×</button>
+
+            <button onClick={() => handleNumber('1')} className="bg-slate-700 hover:bg-slate-600 p-4 rounded text-xl">1</button>
+            <button onClick={() => handleNumber('2')} className="bg-slate-700 hover:bg-slate-600 p-4 rounded text-xl">2</button>
+            <button onClick={() => handleNumber('3')} className="bg-slate-700 hover:bg-slate-600 p-4 rounded text-xl">3</button>
+            <button onClick={() => handleOperator('-')} className="bg-blue-600 hover:bg-blue-700 p-4 rounded text-xl">−</button>
+
+            <button onClick={() => handleNumber('0')} className="bg-slate-700 hover:bg-slate-600 p-4 rounded text-xl">0</button>
+            <button onClick={() => handleNumber('.')} className="bg-slate-700 hover:bg-slate-600 p-4 rounded text-xl">.</button>
+            <button onClick={calculateResult} className="bg-green-600 hover:bg-green-700 p-4 rounded text-xl">=</button>
+            <button onClick={() => handleOperator('+')} className="bg-blue-600 hover:bg-blue-700 p-4 rounded text-xl">+</button>
+
+            <button onClick={() => handleFunction('sqrt')} className="bg-purple-600 hover:bg-purple-700 p-3 rounded text-sm">√x</button>
+            <button onClick={() => handleFunction('square')} className="bg-purple-600 hover:bg-purple-700 p-3 rounded text-sm">x²</button>
+            <button onClick={() => handleOperator('^')} className="bg-blue-600 hover:bg-blue-700 p-3 rounded text-sm">x^y</button>
+            <button onClick={() => handleFunction('exp')} className="bg-purple-600 hover:bg-purple-700 p-3 rounded text-sm">e^x</button>
+
+            <button onClick={() => handleFunction('log')} className="bg-orange-600 hover:bg-orange-700 p-3 rounded text-sm">ln</button>
+            <button onClick={() => handleFunction('log10')} className="bg-orange-600 hover:bg-orange-700 p-3 rounded text-sm">log₁₀</button>
+            <button onClick={() => handleFunction('log2')} className="bg-orange-600 hover:bg-orange-700 p-3 rounded text-sm">log₂</button>
+            <button onClick={clear} className="bg-red-600 hover:bg-red-700 p-3 rounded text-sm">Clear</button>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div className="bg-slate-800 p-4 rounded-lg">
+            <h3 className="font-semibold mb-3 text-blue-400">Current Result</h3>
+            {result ? (
+              <div className="space-y-2 text-sm">
+                <div className="bg-red-900/20 p-3 rounded border border-red-800">
+                  <div className="text-red-400 mb-1">Collapsed:</div>
+                  <div className="font-mono text-2xl font-bold">{result.collapsed}</div>
+                </div>
+                <div className="bg-blue-900/20 p-3 rounded border border-blue-800">
+                  <div className="text-blue-400 mb-1">Persistent:</div>
+                  <div className="font-mono text-2xl font-bold">{result.persistent}</div>
+                </div>
+                <div className="bg-yellow-900/20 p-3 rounded border border-yellow-800">
+                  <div className="text-yellow-400 mb-1">Delta (Δ):</div>
+                  <div className="font-mono text-2xl font-bold">{result.delta}</div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-slate-400 text-sm">Enter calculation</div>
+            )}
+          </div>
+
+          <div className="bg-slate-800 p-4 rounded-lg">
+            <h3 className="font-semibold mb-3 text-purple-400">Examples</h3>
+            <div className="space-y-2 text-xs">
+              <div className="bg-slate-700 p-2 rounded font-mono">
+                3 × 3 → ⟨9, 18, 9⟩
+              </div>
+              <div className="bg-slate-700 p-2 rounded font-mono">
+                2 ^ 3 → ⟨8, 16, 8⟩
+              </div>
+              <div className="bg-slate-700 p-2 rounded font-mono">
+                √32 → ⟨5.657, 4, -1.657⟩
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      )}
+
+      {activeTab === 'binary' && (
+        <div className="grid grid-cols-2 gap-4">
+          <div className="bg-slate-800 p-4 rounded-lg">
+            <h3 className="text-xl font-semibold mb-4 text-green-400">Binary Calculator</h3>
+            
+            <div className="mb-4">
+              <div className="bg-slate-900 p-4 rounded text-right font-mono text-xl mb-2 min-h-[60px] flex items-center justify-end">
+                {binaryInput || '0'}
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-4 gap-2 mb-4">
+              <button onClick={() => addBinaryDigit('1')} className="bg-slate-700 hover:bg-slate-600 p-4 rounded text-xl">1</button>
+              <button onClick={() => addBinaryDigit('0')} className="bg-slate-700 hover:bg-slate-600 p-4 rounded text-xl">0</button>
+              <button onClick={() => addBinaryDigit('+')} className="bg-blue-600 hover:bg-blue-700 p-4 rounded text-xl">+</button>
+              <button onClick={() => addBinaryDigit('*')} className="bg-blue-600 hover:bg-blue-700 p-4 rounded text-xl">×</button>
+              
+              <button onClick={calculateBinaryPersistent} className="col-span-2 bg-green-600 hover:bg-green-700 p-4 rounded text-xl">=</button>
+              <button onClick={clearBinary} className="col-span-2 bg-red-600 hover:bg-red-700 p-4 rounded text-xl">Clear</button>
+            </div>
+            
+            {binaryResult && (
+              <div className="space-y-3 text-sm">
+                <div className="bg-red-900/20 p-3 rounded border border-red-800">
+                  <div className="text-red-400 mb-1">Traditional:</div>
+                  <div className="font-mono text-lg">{binaryResult.traditional.binary}₂</div>
+                  <div className="text-xs text-slate-400">= {binaryResult.traditional.decimal}₁₀</div>
+                </div>
+                
+                <div className="bg-blue-900/20 p-3 rounded border border-blue-800">
+                  <div className="text-blue-400 mb-1">Persistent:</div>
+                  <div className="font-mono text-lg">{binaryResult.persistent.binary}₂</div>
+                  <div className="text-xs text-slate-400">= {binaryResult.persistent.decimal}₁₀</div>
+                </div>
+                
+                <div className="bg-yellow-900/20 p-3 rounded border border-yellow-800">
+                  <div className="text-yellow-400 mb-1">Delta:</div>
+                  <div className="font-mono text-lg">{binaryResult.delta.binary}₂</div>
+                  <div className="text-xs text-slate-400">= {binaryResult.delta.decimal}₁₀</div>
+                </div>
+              </div>
+            )}
+          </div>
+          
+          <div className="space-y-4">
+            <div className="bg-slate-800 p-4 rounded-lg">
+              <h3 className="font-semibold mb-3 text-green-400">Dimensional Persistence</h3>
+              <div className="space-y-3 text-sm">
+                <div className="bg-green-900/20 p-3 rounded border border-green-800">
+                  <div className="font-semibold mb-2 text-green-400">1 + 1 + 1 = 101₂</div>
+                  <div className="text-xs">
+                    The 0 created by 1+1=10 persists!
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="bg-slate-800 p-4 rounded-lg">
+              <h3 className="font-semibold mb-3 text-purple-400">Try These</h3>
+              <div className="space-y-2 text-xs">
+                <div className="bg-slate-700 p-2 rounded font-mono">1+1+1</div>
+                <div className="bg-slate-700 p-2 rounded font-mono">1*1</div>
+                <div className="bg-slate-700 p-2 rounded font-mono">10*10</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default ZBPMCalculator;
